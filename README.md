@@ -25,6 +25,9 @@ downstream interpretation, and abstains when it is not.
 4. **Interpretable prototype.** A Tkinter interface reports, for a queried voxel, the reliability
    label, local variance, portal-vein distance and, for HIGH candidates, the SCS with an explanation.
 
+Pipeline: LiTS pretraining → MC-Dropout fine-tuning → 30-pass inference →
+Stage 1 candidates → Stage 2 HIGH/LOW → evaluation → SCS → prototype.
+
 ## Method
 
 | Step | Setting |
@@ -41,6 +44,14 @@ D is the 3D distance (mm) from the queried voxel to the expert portal-vein annot
 HCC-TACE-Seg (not predicted by the network). The SCS coefficients reproduce four concern ratings given
 by an interventional radiologist; the score is an interpretable prioritisation measure, **not a
 clinically validated risk or safety score**.
+
+## Data preparation (summary)
+
+HCC-TACE-Seg CT series and their DICOM SEG annotations were converted to NIfTI (stored CT values,
+voxel spacing from the DICOM headers). 100 of the 105 patients were used; HCC_006, 041 and 089 were
+excluded for CT/SEG slice-count mismatch and HCC_048 and 065 for incomplete DICOM metadata. Tumour
+and portal-vein masks come from the SEG annotations. For pretraining, LiTS labels were binarised
+(tumour = 1, liver merged into background; 118 cases). Conversion scripts are available on request.
 
 ## Results (20 validation cases, 31 candidates)
 
@@ -63,7 +74,7 @@ Results are preliminary (small internal cohort); external validation is future w
 ```
 uncertainty-aware-hcc/
 ├── README.md
-├── LICENSE.txt
+├── LICENSE
 ├── requirements.txt
 ├── config/
 │   ├── split.json            # nnU-Net fold-0 split (80 development / 20 validation)
@@ -86,23 +97,54 @@ uncertainty-aware-hcc/
     └── pair_table.csv            # validation lesion–candidate pairs (local Dice)
 ```
 
-## Usage
+## Installation
+
+```bash
+git clone https://github.com/SayantanM7/uncertainty-aware-hcc.git
+cd uncertainty-aware-hcc
+pip install -r requirements.txt
+```
+
+Edit the paths at the top of `config/parameters.yaml`; all other settings are those used in the paper.
+
+## Quick check without images
+
+```bash
+cd code
+python evaluate.py --from-csv
+python calibrate_tau.py --from-csv
+```
+
+These recompute Table 1, the local Dice comparison, the AUCs with the paired bootstrap and τ from
+the CSV files in `results/`; no images or GPU are needed.
+
+## Full pipeline
 
 1. **Data.** Download HCC-TACE-Seg from The Cancer Imaging Archive
    (doi:10.7937/TCIA.5FNA-0924) and LiTS. Images and masks are not redistributed here.
+   Convert them to nnU-Net format as described in *Data preparation* (images
+   `imagesTr/<case>_0000.nii.gz`, binary tumour labels `labelsTr/<case>.nii.gz`).
 2. **Training.** Follow `training/README.md` (LiTS pretraining, plan alignment, fine-tuning with
    `3d_fullres_mcdropout`).
 3. **Inference.** `python code/mc_dropout.py` writes `mean_prob.nii.gz` and `var_map.nii.gz` per case.
 4. **Candidates and reliability.** `python code/candidates.py` writes Stage-1 and Stage-2 label maps;
    `python code/calibrate_tau.py` reproduces τ from the development candidates.
-5. **Evaluation.** `python code/evaluate.py` reproduces the validation results above
-   (`--from-csv` recomputes Table 1, local Dice and the AUCs from `results/` without the images).
-6. **Spatial concern.** Place each case's portal-vein annotation in its work folder as `portal_vein_mask.nii.gz`;
-   `python code/scs.py` writes the distance maps.
+5. **Evaluation.** `python code/evaluate.py` reproduces the validation results above and rewrites
+   the CSV files in `results/`.
+6. **Spatial concern.** Place each case's portal-vein annotation in its work folder as
+   `portal_vein_mask.nii.gz` (same geometry as the CT); `python code/scs.py` writes the distance maps.
 7. **Prototype.** `python prototype/gui.py`; enter a case ID and a voxel index (i, j, k) read from 3D Slicer.
 
-All thresholds and constants are read from `config/parameters.yaml`.
-Inference was run with nnU-Net v2 (nnunetv2 2.8.1); see `requirements.txt`.
+## Reproducibility notes
+
+- The trained weights (epoch-295 `checkpoint_best.pth`) are not included in this repository;
+  `training/README.md` gives the exact commands that produced them.
+- MC-Dropout inference is stochastic and no seed was fixed, so repeated runs may differ slightly
+  in the variance maps; the values reported in the paper are in `results/`.
+- The paired bootstrap uses 5000 case-level resamples with seed 0 (`config/parameters.yaml`).
+- τ is stored as applied in the paper (0.01929155); `calibrate_tau.py` prints both the exact
+  F1 optimum and the applied value.
+- Inference was run with nnU-Net v2 (nnunetv2 2.8.1) and PyTorch 2.7.1 (CUDA 12.8).
 
 ## Citation
 
@@ -115,4 +157,5 @@ score, and a medical oncologist for clinical guidance.
 
 ## License
 
-This project is released under the [MIT License](LICENSE.txt).
+This project is released under the [MIT License](LICENSE).
+The datasets are subject to their own licences (HCC-TACE-Seg: TCIA; LiTS: challenge terms).
