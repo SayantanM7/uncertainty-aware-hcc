@@ -41,9 +41,11 @@ Stage 1 candidates → Stage 2 HIGH/LOW → evaluation → SCS → prototype.
 | SCS (HIGH only) | U_N = U / (U + 0.05); P = 1 for D ≤ 5 mm, else exp(−(D − 5)/5); R = 1 + 6.5P + 4U_N − 2PU_N, and R = 10 for D ≤ 5 mm |
 
 D is the 3D distance (mm) from the queried voxel to the expert portal-vein annotation provided with
-HCC-TACE-Seg (not predicted by the network). The SCS coefficients reproduce four concern ratings given
-by an interventional radiologist; the score is an interpretable prioritisation measure, **not a
-clinically validated risk or safety score**.
+HCC-TACE-Seg (not predicted by the network). An interventional radiologist rated eight scenarios
+(HIGH/LOW confidence × sharp/fuzzy uncertainty × far/near portal vein); the SCS coefficients reproduce
+the four HIGH-candidate ratings. LOW candidates receive no score, because ablation would not be planned
+on a low-confidence lesion. The score is an interpretable prioritisation measure, **not a clinically
+validated risk or safety score**.
 
 ## Data preparation (summary)
 
