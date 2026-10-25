@@ -83,8 +83,8 @@ candidate. Because HIGH and LOW candidates carry different reliability by design
 per group rather than pooled. Variance is treated as a complementary reliability signal to maximum
 probability. Results are preliminary (small internal cohort); external validation is future work.
 
-`results/lesion_table.csv` lists every validation reference component; components below 100 voxels
-(three in total) are excluded from the 22 lesions, as in the paper.
+`results/lesion_table.csv` and `results/pair_table.csv` include reference components below 100 voxels;
+these are excluded from the 22 lesions and 18 pairs, as in the paper.
 
 ## Repository structure
 
@@ -105,7 +105,7 @@ uncertainty-aware-hcc/
 │   ├── mc_dropout.py         # 30 passes -> mean_prob.nii.gz, var_map.nii.gz
 │   ├── candidates.py         # Stage 1 and Stage 2
 │   ├── calibrate_tau.py      # F1-maximising threshold on development candidates
-│   ├── evaluate.py           # Table 1, local Dice, Mann–Whitney, AUCs, paired bootstrap
+│   ├── evaluate.py           # Tables 1–2, overlap check, AUCs, operating point, size analysis
 │   └── scs.py                # portal-vein distance map, U_N, P(D), SCS
 ├── prototype/
 │   └── gui.py                # Tkinter interface
@@ -133,8 +133,10 @@ python evaluate.py --from-csv
 python calibrate_tau.py --from-csv
 ```
 
-These recompute Table 1, the local Dice comparison, the AUCs with the paired bootstrap and τ from
-the CSV files in `results/`; no images or GPU are needed.
+These recompute every validation number in the paper except the accepted-case Dice (which needs the
+images): Table 1, the overlap check, Table 2 with local Dice and the Mann–Whitney test, the AUCs with
+the paired bootstrap, the operating-point comparison, the size analysis, and τ. No images or GPU are
+needed.
 
 ## Full pipeline
 
@@ -148,7 +150,7 @@ the CSV files in `results/`; no images or GPU are needed.
 4. **Candidates and reliability.** `python code/candidates.py` writes Stage-1 and Stage-2 label maps;
    `python code/calibrate_tau.py` reproduces τ from the development candidates.
 5. **Evaluation.** `python code/evaluate.py` reproduces the validation results above and rewrites
-   `candidate_table_all.csv` and `pair_table.csv` in `results/`.
+   the three CSV files in `results/`.
 6. **Spatial concern.** Place each case's portal-vein annotation in its work folder as
    `portal_vein_mask.nii.gz` (same geometry as the CT); `python code/scs.py` writes the distance maps.
 7. **Prototype.** `python prototype/gui.py`; enter a case ID and a voxel index (i, j, k) read from 3D Slicer.
@@ -162,7 +164,7 @@ the CSV files in `results/`; no images or GPU are needed.
 - The paired bootstrap uses 5000 case-level resamples with seed 0 (`config/parameters.yaml`).
 - τ is stored as applied in the paper (0.01929155); `calibrate_tau.py` prints both the exact
   F1 optimum and the applied value.
-- Inference was run with nnU-Net v2 (nnunetv2 2.8.1) and PyTorch 2.7.1 (CUDA 12.8).
+- Inference was run with nnU-Net v2 (nnunetv2 2.8.1) and PyTorch 2.7.1 (CUDA 12.8); tested with Python 3.10.12.
 
 ## Citation
 
