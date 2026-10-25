@@ -34,7 +34,7 @@ Stage 1 candidates → Stage 2 HIGH/LOW → evaluation → SCS → prototype.
 |---|---|
 | Data | HCC-TACE-Seg, 100 cases, binary tumour label; nnU-Net fold 0: 80 development, 20 validation cases |
 | Network | nnU-Net v2, 3D full resolution, 128³ patches, 2.5 × 0.78 × 0.78 mm |
-| Training | Pretrained on LiTS (binary tumour label, no dropout); fine-tuned on the 80 development cases with Dropout3d (p = 0.2), configuration `3d_fullres_mcdropout`; checkpoint epoch 295 |
+| Training | Pretrained on LiTS (binary tumour label, no dropout); fine-tuned on the 80 development cases with Dropout3d (p = 0.2), configuration `3d_fullres_mcdropout`; checkpoint epoch 295 (nnU-Net's best checkpoint by smoothed validation pseudo-Dice) |
 | Inference | 30 passes with all 22 Dropout3d layers active, mirroring and Gaussian blending; mean probability p̄ and population variance U |
 | Stage 1 | p̄ ≥ 0.10, 6-connected components, keep a component if max p̄ ≥ 0.80 |
 | Stage 2 | HIGH if the candidate's mean variance ≤ τ = 0.01929155, otherwise LOW; τ maximised F1 for tumour overlap over the 132 in-sample development candidates and was frozen before validation |
@@ -43,9 +43,10 @@ Stage 1 candidates → Stage 2 HIGH/LOW → evaluation → SCS → prototype.
 D is the 3D distance (mm) from the queried voxel to the expert portal-vein annotation provided with
 HCC-TACE-Seg (not predicted by the network). An interventional radiologist rated eight scenarios
 (HIGH/LOW confidence × sharp/fuzzy uncertainty × far/near portal vein); the SCS coefficients reproduce
-the four HIGH-candidate ratings. LOW candidates receive no score, because ablation would not be planned
-on a low-confidence lesion. The score is an interpretable prioritisation measure, **not a clinically
-validated risk or safety score**.
+the four HIGH-candidate ratings, and proximity dominates uncertainty over the whole surface
+(∂R/∂P ≥ 4.5 > ∂R/∂U_N), as the expert ranked. LOW candidates receive no score, because ablation would
+not be planned on a low-confidence lesion. The score is an interpretable prioritisation measure,
+**not a clinically validated risk or safety score**.
 
 ## Data preparation (summary)
 
@@ -55,21 +56,35 @@ excluded for CT/SEG slice-count mismatch and HCC_048 and 065 for incomplete DICO
 and portal-vein masks come from the SEG annotations. For pretraining, LiTS labels were binarised
 (tumour = 1, liver merged into background; 118 cases). Conversion scripts are available on request.
 
-## Results (20 validation cases, 31 candidates)
+## Results (20 validation cases, 31 candidates, 22 lesions)
+
+| Outcome | Count | Local Dice, median (range) |
+|---|---|---|
+| HIGH on tumour | 14 lesions (14 cases) | 0.82 (0.55–0.92) |
+| LOW on tumour | 4 lesions (4 cases) | 0.62 (0.22–0.71) |
+| HIGH false positive | **0 candidates** | — |
+| LOW false positive | 13 candidates (8 cases) | — |
+| Missed, no candidate | 3 lesions | — |
+| Missed, removed by the 0.80 gate | 1 lesion | — |
 
 | Measure | Result |
 |---|---|
 | HIGH candidates overlapping tumour | 14 / 14 (100%; exact 95% CI 76.8–100%) |
-| LOW candidates overlapping tumour | 4 / 17 (23.5%) |
-| Non-overlapping candidates labelled LOW | 13 / 13 |
-| Local Dice with the reference lesion, median | HIGH 0.82 (n = 14) vs LOW 0.62 (n = 4); exact Mann–Whitney p = 0.008 (exploratory) |
+| Non-overlapping candidates labelled LOW | 13 / 13; 11 of them had maximum probability ≥ 0.90 |
+| Local Dice, HIGH vs LOW | exact two-sided Mann–Whitney p = 0.008 (exploratory; one lesion–candidate pair per case) |
 | Mean Dice in the 14 cases with a HIGH candidate | 0.738 (raw) → 0.746 (Stage 1) → 0.801 (Stage 2) |
 | Candidate-overlap AUC | variance 0.876 vs maximum probability 0.846 (paired case-level bootstrap of the difference: +0.029, 95% CI −0.064 to 0.118) |
+| At the flag's operating point (14 accepted candidates) | variance accepts 0 false positives; maximum probability would accept 2 |
 
-The flag trades coverage for reliability: across all 20 cases, mean Dice is 0.616 (raw), 0.631
-(Stage 1) and 0.561 (Stage 2), because the six cases without a HIGH candidate are deferred.
-Variance is treated as a complementary reliability signal, not a superior detector.
-Results are preliminary (small internal cohort); external validation is future work.
+A candidate overlaps tumour if any voxel intersects the reference; every overlap shares at least
+3,864 voxels, and the results are unchanged if at least 25% of a candidate's voxels must lie within
+the tumour. Five cases had only LOW candidates and were deferred for review; HCC_060 produced no
+candidate. Because HIGH and LOW candidates carry different reliability by design, Dice is reported
+per group rather than pooled. Variance is treated as a complementary reliability signal to maximum
+probability. Results are preliminary (small internal cohort); external validation is future work.
+
+`results/lesion_table.csv` lists every validation reference component; components below 100 voxels
+(three in total) are excluded from the 22 lesions, as in the paper.
 
 ## Repository structure
 
@@ -96,7 +111,8 @@ uncertainty-aware-hcc/
 │   └── gui.py                # Tkinter interface
 └── results/
     ├── candidate_table_all.csv   # all 163 candidates (132 development, 31 validation)
-    └── pair_table.csv            # validation lesion–candidate pairs (local Dice)
+    ├── pair_table.csv            # validation lesion–candidate pairs (local Dice)
+    └── lesion_table.csv          # all validation reference components; the paper counts the 22 with ≥ 100 voxels
 ```
 
 ## Installation
@@ -132,7 +148,7 @@ the CSV files in `results/`; no images or GPU are needed.
 4. **Candidates and reliability.** `python code/candidates.py` writes Stage-1 and Stage-2 label maps;
    `python code/calibrate_tau.py` reproduces τ from the development candidates.
 5. **Evaluation.** `python code/evaluate.py` reproduces the validation results above and rewrites
-   the CSV files in `results/`.
+   `candidate_table_all.csv` and `pair_table.csv` in `results/`.
 6. **Spatial concern.** Place each case's portal-vein annotation in its work folder as
    `portal_vein_mask.nii.gz` (same geometry as the CT); `python code/scs.py` writes the distance maps.
 7. **Prototype.** `python prototype/gui.py`; enter a case ID and a voxel index (i, j, k) read from 3D Slicer.

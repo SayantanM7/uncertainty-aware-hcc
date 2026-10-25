@@ -1,9 +1,9 @@
-nnunetv2==2.8.1      # inference version used in the paper
-torch>=2.7           # CUDA build; the paper used 2.7.1+cu128
-numpy
-scipy
-pandas
-scikit-learn
-nibabel
-SimpleITK
-pyyaml
+nnunetv2==2.8.1      
+torch>=2.7           
+numpy==2.2.6
+scipy==1.15.3
+pandas==2.3.3
+scikit-learn==1.7.2
+nibabel==5.4.2
+SimpleITK==2.5.5
+pyyaml==5.4.1
