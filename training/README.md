@@ -45,5 +45,4 @@ nnUNetv2_train 3 3d_fullres_mcdropout 0 \
 ```
 
 The fold-0 split is in `config/split.json` (nnU-Net's `splits_final.json`). Fine-tuning was stopped
-manually after 320 epochs, as the validation pseudo-Dice had plateaued; `checkpoint_best.pth`
-(epoch 295, smoothed pseudo-Dice 0.717) is the model used in the paper.
+manually after 320 epochs; `checkpoint_best.pth` (epoch 295, smoothed pseudo-Dice 0.717) is the model used in the paper.
