@@ -3,8 +3,8 @@
 Code and results for a candidate-level reliability flag for automatically generated
 hepatocellular carcinoma (HCC) candidates in contrast-enhanced CT, based on Monte Carlo (MC) Dropout.
 
-**Authors:** Sayantan Mandal (Independent Researcher, Kolkata, India and ex-student of VNIT Nagpur, Maharashtra, India) and
-Ashish Tiwari (VNIT Nagpur, India).
+**Authors:** Sayantan Mandal (Independent Researcher, Kolkata, India; former M.Tech. student, Dept. of Electronics and Communication Engineering, VNIT Nagpur, India) and
+Ashish Tiwari (Associate Professor, Computer Science Department, VNIT Nagpur, India).
 The accompanying paper is currently under review.
 
 > Research prototype. HIGH/LOW denotes **model reliability, not HCC probability**.
@@ -19,7 +19,8 @@ downstream interpretation, and abstains when it is not.
 1. **Candidate generation (Stage 1).** An nnU-Net with Dropout3d produces mean probability and
    variance maps from 30 stochastic passes; candidates are connected components of the mean map.
 2. **Reliability (Stage 2).** Each candidate is labelled **HIGH** or **LOW** by its mean variance.
-   LOW candidates are an **abstention**: they stay visible for review and are not treated as non-tumour.
+   LOW candidates are an **abstention**: they stay visible for clinician review (a clinician in the loop)
+   and are not treated as non-tumour.
 3. **Spatial concern (HIGH only).** An expert-anchored Spatial Concern Score (SCS) combines local
    uncertainty with portal-vein proximity. LOW candidates receive no score.
 4. **Interpretable prototype.** A Tkinter interface reports, for a queried voxel, the reliability
@@ -34,17 +35,19 @@ Stage 1 candidates → Stage 2 HIGH/LOW → evaluation → SCS → prototype.
 |---|---|
 | Data | HCC-TACE-Seg, 100 cases, binary tumour label; nnU-Net fold 0: 80 development, 20 validation cases |
 | Network | nnU-Net v2, 3D full resolution, 128³ patches, 2.5 × 0.78 × 0.78 mm |
-| Training | Pretrained on LiTS (binary tumour label, no dropout); fine-tuned on the 80 development cases with Dropout3d (p = 0.2), configuration `3d_fullres_mcdropout`; checkpoint epoch 295 (nnU-Net's best checkpoint by smoothed validation pseudo-Dice) |
+| Training | Pretrained on LiTS (primary and secondary liver tumours, binary label, no dropout); fine-tuned on the 80 development cases with Dropout3d (p = 0.2), configuration `3d_fullres_mcdropout`; checkpoint epoch 295 (nnU-Net's best checkpoint by smoothed validation pseudo-Dice) |
 | Inference | 30 passes with all 22 Dropout3d layers active, mirroring and Gaussian blending; mean probability p̄ and population variance U |
 | Stage 1 | p̄ ≥ 0.10, 6-connected components, keep a component if max p̄ ≥ 0.80 |
-| Stage 2 | HIGH if the candidate's mean variance ≤ τ = 0.01929155, otherwise LOW; τ maximised F1 for tumour overlap over the 132 in-sample development candidates and was frozen before validation |
+| Stage 2 | HIGH if the candidate's mean variance ≤ τ = 0.01929155, otherwise LOW; τ maximised F1 for tumour overlap over the 132 in-sample development candidates (development F1 within 0.02 of its maximum, 0.844, for τ ≈ 0.013–0.021) and was frozen before validation |
 | SCS (HIGH only) | U_N = U / (U + 0.05); P = 1 for D ≤ 5 mm, else exp(−(D − 5)/5); R = 1 + 6.5P + 4U_N − 2PU_N, and R = 10 for D ≤ 5 mm |
 
 D is the 3D distance (mm) from the queried voxel to the expert portal-vein annotation provided with
 HCC-TACE-Seg (not predicted by the network). An interventional radiologist rated eight scenarios
 (HIGH/LOW confidence × sharp/fuzzy uncertainty × far/near portal vein); the SCS coefficients reproduce
-the four HIGH-candidate ratings, and proximity dominates uncertainty over the whole surface
-(∂R/∂P ≥ 4.5 > ∂R/∂U_N), as the expert ranked. LOW candidates receive no score, because ablation would
+the four HIGH-candidate ratings (sharp/far 1, sharp/near 7.5, fuzzy/far 5, fuzzy/near 9.5). Just outside
+5 mm, R approaches the expert's near ratings (7.5 sharp, 9.5 fuzzy); within 5 mm, following the expert's
+distance-first ranking, a maximum-concern constraint sets R = 10. The four LOW-confidence ratings
+(4, 9, 7, 10, in the same order) are not used: LOW candidates receive no score, because ablation would
 not be planned on a low-confidence lesion. The score is an interpretable prioritisation measure,
 **not a clinically validated risk or safety score**.
 
@@ -75,6 +78,8 @@ and portal-vein masks come from the SEG annotations. For pretraining, LiTS label
 | Mean Dice in the 14 cases with a HIGH candidate | 0.738 (raw) → 0.746 (Stage 1) → 0.801 (Stage 2) |
 | Candidate-overlap AUC | variance 0.876 vs maximum probability 0.846 (paired case-level bootstrap of the difference: +0.029, 95% CI −0.064 to 0.118) |
 | At the flag's operating point (14 accepted candidates) | variance accepts 0 false positives; maximum probability would accept 2 |
+| Risk–coverage over all thresholds | AURC 0.157 for variance vs 0.174 for maximum probability (0.110 for a perfect ranking); 14 vs 10 candidates accepted before the first false positive |
+| Development candidates (calibration, in-sample) | 56 / 67 HIGH candidates overlapped tumour (84%), consistent with the validation interval |
 
 A candidate overlaps tumour if any voxel intersects the reference; every overlap shares at least
 3,864 voxels, and the results are unchanged if at least 25% of a candidate's voxels must lie within
@@ -104,8 +109,8 @@ uncertainty-aware-hcc/
 │   ├── common.py             # parameters, split, paths, NIfTI I/O
 │   ├── mc_dropout.py         # 30 passes -> mean_prob.nii.gz, var_map.nii.gz
 │   ├── candidates.py         # Stage 1 and Stage 2
-│   ├── calibrate_tau.py      # F1-maximising threshold on development candidates
-│   ├── evaluate.py           # Tables 1–2, overlap check, AUCs, operating point, size analysis
+│   ├── calibrate_tau.py      # F1-maximising τ, its plateau and development precision
+│   ├── evaluate.py           # Tables 1–2, overlap check, AUCs, risk–coverage (AURC), size analysis
 │   └── scs.py                # portal-vein distance map, U_N, P(D), SCS
 ├── prototype/
 │   └── gui.py                # Tkinter interface
@@ -133,10 +138,10 @@ python evaluate.py --from-csv
 python calibrate_tau.py --from-csv
 ```
 
-These recompute every validation number in the paper except the accepted-case Dice (which needs the
+These recompute every number in the paper's results except the accepted-case Dice (which needs the
 images): Table 1, the overlap check, Table 2 with local Dice and the Mann–Whitney test, the AUCs with
-the paired bootstrap, the operating-point comparison, the size analysis, and τ. No images or GPU are
-needed.
+the paired bootstrap, the operating-point comparison, the risk–coverage AURC, the size analysis, and τ
+with its development plateau and precision. No images or GPU are needed.
 
 ## Full pipeline
 
@@ -162,8 +167,8 @@ needed.
 - MC-Dropout inference is stochastic and no seed was fixed, so repeated runs may differ slightly
   in the variance maps; the values reported in the paper are in `results/`.
 - The paired bootstrap uses 5000 case-level resamples with seed 0 (`config/parameters.yaml`).
-- τ is stored as applied in the paper (0.01929155); `calibrate_tau.py` prints both the exact
-  F1 optimum and the applied value.
+- τ is stored as applied in the paper (0.01929155); `calibrate_tau.py` prints the exact F1 optimum
+  (0.0192915536), the applied value, the F1 plateau and the development precision.
 - Inference was run with nnU-Net v2 (nnunetv2 2.8.1) and PyTorch 2.7.1 (CUDA 12.8); tested with Python 3.10.12.
 
 ## Citation

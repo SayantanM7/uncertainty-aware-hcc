@@ -6,7 +6,8 @@
             with local Dice per reliability group (exact Mann-Whitney, HIGH vs LOW)
   Accepted  mean Dice in the cases with a HIGH candidate: raw, Stage 1, Stage 2 (needs the images)
   AUC       tumour overlap: -mean variance vs maximum probability (paired case-level bootstrap),
-            saturation of maximum probability and the comparison at the flag's operating point
+            saturation of maximum probability, the comparison at the flag's operating point and the
+            risk-coverage curves over all thresholds (AURC)
   Size      variance within size halves and against candidate volume (development and validation)
 
 Usage: python code/evaluate.py              # from the NIfTI outputs; also rewrites results/*.csv
@@ -151,6 +152,12 @@ def case_bootstrap(d, stat, n_boot, seed):
     return np.mean(out), *np.percentile(out, [2.5, 97.5]), len(out)
 
 
+def risk_coverage(v, score):
+    """False-positive fraction among the k most reliable candidates (highest score first), k = 1..n."""
+    fp = (v.gt_overlap.values == 0)[np.argsort(-score(v).values, kind="stable")]
+    return fp, np.cumsum(fp) / np.arange(1, len(fp) + 1)
+
+
 def auc_comparison(v, n_boot, seed):
     m, lo, hi, n = case_bootstrap(v, lambda b: auc(b, VAR) - auc(b, MAXP), n_boot, seed)
     print(f"\nAUC for tumour overlap: variance {auc(v, VAR):.3f}, maximum probability {auc(v, MAXP):.3f}")
@@ -164,6 +171,12 @@ def auc_comparison(v, n_boot, seed):
     by_max = int((v.nlargest(k, "max_prob").gt_overlap == 0).sum())
     print(f"  at the operating point ({k} accepted candidates): false positives "
           f"{by_var} by variance, {by_max} by maximum probability")
+    (fp_var, r_var), (fp_max, r_max) = risk_coverage(v, VAR), risk_coverage(v, MAXP)
+    perfect = np.cumsum(np.sort(fp_var)) / np.arange(1, len(fp_var) + 1)
+    first = lambda f: int(np.argmax(f)) if f.any() else len(f)     # candidates accepted before the first FP
+    print(f"  risk-coverage over all thresholds: AURC {r_var.mean():.3f} for variance, {r_max.mean():.3f} for "
+          f"maximum probability (perfect ranking {perfect.mean():.3f}); accepted before the first false "
+          f"positive: {first(fp_var)} by variance, {first(fp_max)} by maximum probability")
 
 
 def size_check(cand, n_boot, seed):

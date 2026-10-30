@@ -64,7 +64,7 @@ def report(case, ijk, vols):
                 f"RATIONALE\n{LINE}\nThis candidate is LOW confidence. The framework deliberately abstains from "
                 "assigning a quantitative spatial-concern score to LOW-confidence candidates rather than creating "
                 "a false impression of certainty.\n\nLOW confidence represents uncertainty in the automated "
-                "candidate characterisation. It does not mean non-tumour, metastasis, or low clinical importance.\n\n"
+                "candidate characterisation. It does not mean non-tumour, or low clinical importance.\n\n"
                 "Clinical diagnostic and management decisions are outside the scope of this engineering prototype.")
     score = spatial_concern_score(u, d)
     return (head + info + f"\nANATOMICAL CONTEXT\n{LINE}\nPortal-vein distance: {d:.2f} mm\n"

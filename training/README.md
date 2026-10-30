@@ -12,6 +12,9 @@ export nnUNet_compile=False
 
 ## 1. LiTS pretraining (Dataset002, binary tumour label, no dropout)
 
+LiTS labels were binarised (tumour = 1, liver merged into background; 118 cases with tumour), as
+described under *Data preparation* in the main README.
+
 ```bash
 nnUNetv2_plan_and_preprocess -d 2 --verify_dataset_integrity
 nnUNetv2_train 2 3d_fullres 0
@@ -24,18 +27,28 @@ LiTS fold-0 validation split) was used for fine-tuning.
 
 ```bash
 nnUNetv2_plan_and_preprocess -d 3 --verify_dataset_integrity
-python training/prepare_fine_tuning.py \
-    $nnUNet_preprocessed/Dataset002_*/nnUNetPlans.json \
-    $nnUNet_preprocessed/Dataset003_HCCTACE/nnUNetPlans.json
+cp config/nnunet_plans.json $nnUNet_preprocessed/Dataset003_HCCTACE/nnUNetPlans.json
+cp config/split.json $nnUNet_preprocessed/Dataset003_HCCTACE/splits_final.json
 nnUNetv2_preprocess -d 3 -c 3d_fullres
 ```
 
-`prepare_fine_tuning.py` copies the LiTS architecture and patch size (128³) into the HCC plans so
-that the pretrained weights load. The configuration `3d_fullres_mcdropout` is the aligned
-`3d_fullres` configuration with `dropout_op = torch.nn.Dropout3d` (p = 0.2); it is defined in
-`config/nnunet_plans.json`, which can be copied to
-`$nnUNet_preprocessed/Dataset003_HCCTACE/nnUNetPlans.json`. It shares the `3d_fullres`
-preprocessed data, so no extra preprocessing is needed.
+`config/nnunet_plans.json` is the plans file used in the paper. It contains the aligned `3d_fullres`
+configuration (LiTS architecture and 128³ patch size, so the pretrained weights load), the
+`3d_fullres_mcdropout` configuration (the same with `dropout_op = torch.nn.Dropout3d`, p = 0.2), and
+the dataset fingerprint, so normalisation matches the paper. `3d_fullres_mcdropout` shares the
+`3d_fullres` preprocessed data, so no extra preprocessing is needed. `config/split.json` is the fold-0
+split used in the paper (80 development / 20 validation cases).
+
+The plans were produced from nnU-Net's own HCC plans with `prepare_fine_tuning.py`, which copies the
+LiTS `architecture` and `patch_size` into the HCC `3d_fullres` configuration:
+
+```bash
+python training/prepare_fine_tuning.py \
+    $nnUNet_preprocessed/Dataset002_*/nnUNetPlans.json \
+    $nnUNet_preprocessed/Dataset003_HCCTACE/nnUNetPlans.json
+```
+
+followed by adding `3d_fullres_mcdropout` as a copy of `3d_fullres` with Dropout3d (p = 0.2).
 
 ## 3. Fine-tuning with MC Dropout (fold 0: 80 development cases)
 
@@ -44,5 +57,6 @@ nnUNetv2_train 3 3d_fullres_mcdropout 0 \
     -pretrained_weights $nnUNet_results/Dataset002_*/nnUNetTrainer__nnUNetPlans__3d_fullres/fold_0/checkpoint_best.pth
 ```
 
-The fold-0 split is in `config/split.json` (nnU-Net's `splits_final.json`). Fine-tuning was stopped
-manually after 320 epochs; `checkpoint_best.pth` (epoch 295, smoothed pseudo-Dice 0.717) is the model used in the paper.
+Fine-tuning was stopped manually after 320 epochs; `checkpoint_best.pth` (epoch 295, smoothed
+pseudo-Dice 0.717) is the model used in the paper. The trained weights are not included in this
+repository.
